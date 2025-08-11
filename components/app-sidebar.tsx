@@ -2,9 +2,9 @@
 
 import * as React from "react"
 import {
-  Sidebar, // Asosiy Sidebar konteyneri
+  Sidebar,
   SidebarMenuButton,
-} from "@/components/ui/sidebar" // Faqat kerakli komponentlarni import qilamiz
+} from "@/components/ui/sidebar"
 import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
 import { ChevronDown, Trash, MapPin, Ruler, Square, Users, Eye, EyeOff, LogOut, Navigation } from "lucide-react" // Trash iconi qo'shildi
@@ -207,10 +207,10 @@ export function AppSidebar({
   const otherActiveUsersWithLocation = users.filter((u) => u.id !== currentUser?.uid && u.active && u.realLocation)
 
   return (
-    <Sidebar className="flex flex-col h-full bg-white border-r border-gray-200">
+    <Sidebar className="flex flex-col h-full bg-gradient-to-b from-slate-50 to-white border-r border-slate-200 shadow-sm">
       {/* Xarita tafsilotlari (Yuqori qism) */}
-      <div className="p-4 border-b border-gray-200">
-        <div id="map-details" className="relative">
+      <div className="p-6 border-b border-slate-200 bg-white">
+        <div id="map-details" className="relative space-y-3">
           {editingName ? (
             <Input
               id="map-name"
@@ -218,17 +218,16 @@ export function AppSidebar({
               onChange={(e) => setCurrentMapName(e.target.value)}
               onBlur={handleNameBlur}
               onKeyDown={handleKeyDown}
-              className="map-editing text-lg font-semibold text-black focus-visible:ring-0 focus-visible:ring-offset-0 h-auto p-0 border-none"
+              className="map-editing text-xl font-bold text-slate-800 focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-0 h-auto p-2 border border-slate-300 rounded-md"
               autoFocus
             />
           ) : (
-            <Input
-              id="map-name"
-              value={currentMapName}
-              disabled
-              className="text-lg font-semibold text-black h-auto p-0 border-none"
-              onMouseDown={() => setEditingName(true)}
-            />
+            <div
+              className="text-xl font-bold text-slate-800 p-2 rounded-md hover:bg-slate-100 cursor-pointer transition-colors"
+              onClick={() => setEditingName(true)}
+            >
+              {currentMapName}
+            </div>
           )}
           {editingDescription ? (
             <Textarea
@@ -237,55 +236,68 @@ export function AppSidebar({
               onChange={(e) => setCurrentMapDescription(e.target.value)}
               onBlur={handleDescriptionBlur}
               onKeyDown={handleKeyDown}
-              className="map-editing mt-1 text-sm font-medium text-gray-600 focus-visible:ring-0 focus-visible:ring-offset-0 h-auto p-0 border-none resize-none"
+              className="map-editing text-sm text-slate-600 focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-0 p-2 border border-slate-300 rounded-md resize-none"
               autoFocus
               rows={2}
             />
           ) : (
-            <Textarea
-              id="map-description"
-              value={currentMapDescription}
-              disabled
-              className="mt-1 text-sm font-medium text-gray-600 h-auto p-0 border-none resize-none"
-              onMouseDown={() => setEditingDescription(true)}
-              rows={2}
-            />
+            <div
+              className="text-sm text-slate-600 p-2 rounded-md hover:bg-slate-100 cursor-pointer transition-colors min-h-[2.5rem] flex items-center"
+              onClick={() => setEditingDescription(true)}
+            >
+              {currentMapDescription || "Tavsif qo'shing..."}
+            </div>
           )}
         </div>
       </div>
 
       {/* Tablar (Xarita va Guruh) */}
       <Tabs defaultValue="map" className="flex flex-col flex-1">
-        <TabsList className="grid w-full grid-cols-2 h-12 rounded-none border-b border-gray-200 bg-white">
-          <TabsTrigger value="map" className="rounded-none text-base font-medium">
-            Xarita
+        <TabsList className="grid w-full grid-cols-2 h-14 rounded-none border-b border-slate-200 bg-slate-50/50 backdrop-blur-sm">
+          <TabsTrigger value="map" className="rounded-lg mx-2 text-base font-semibold data-[state=active]:bg-white data-[state=active]:text-blue-600 data-[state=active]:shadow-sm transition-all">
+            🗺️ Xarita
           </TabsTrigger>
-          <TabsTrigger value="group" className="rounded-none text-base font-medium">
-            Guruh
+          <TabsTrigger value="group" className="rounded-lg mx-2 text-base font-semibold data-[state=active]:bg-white data-[state=active]:text-blue-600 data-[state=active]:shadow-sm transition-all">
+            👥 Guruh
           </TabsTrigger>
         </TabsList>
 
         {/* Tab kontentlari uchun scrollable area */}
         <ScrollArea className="flex-1">
-          <TabsContent value="map" className="h-full flex flex-col p-4">
+          <TabsContent value="map" className="h-full flex flex-col p-6">
             <div id="annotations-section" className="relative flex-1">
               <div
                 id="annotations-header"
-                className="sticky top-0 z-10 flex items-center justify-between bg-white py-2 -mx-4 px-4"
+                className="sticky top-0 z-10 flex items-center justify-between bg-white py-4 -mx-6 px-6 border-b border-slate-100"
               >
-                <div className="text-sm font-semibold text-black">Qatlamlar</div>
-                <div className="flex items-center gap-2">
-                  <div
-                    id="hide-annotations"
-                    className="cursor-pointer text-sm font-medium text-gray-600 hover:opacity-60"
+                <div className="text-lg font-bold text-slate-800 flex items-center gap-2">
+                  <span className="w-2 h-2 bg-blue-500 rounded-full"></span>
+                  Qatlamlar
+                </div>
+                <div className="flex items-center gap-3">
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="text-slate-600 hover:text-slate-800 hover:bg-slate-100"
                     onClick={onToggleAnnotations}
                   >
-                    {hideAnnotations ? "Hammasini ko'rsatish" : "Hammasini yashirish"}
-                  </div>
+                    {hideAnnotations ? (
+                      <>
+                        <Eye className="h-4 w-4 mr-1" />
+                        Ko'rsatish
+                      </>
+                    ) : (
+                      <>
+                        <EyeOff className="h-4 w-4 mr-1" />
+                        Yashirish
+                      </>
+                    )}
+                  </Button>
                   {objects.filter((obj) => obj.completed).length > 0 && (
-                    <div
-                      id="delete-all-annotations"
-                      className="cursor-pointer text-sm font-medium text-red-600 hover:opacity-60"
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="text-red-600 hover:text-red-700 hover:bg-red-50"
                       onClick={() => {
                         if (confirm("Barcha qatlamlarni o'chirishni xohlaysizmi?")) {
                           objects
@@ -296,69 +308,81 @@ export function AppSidebar({
                         }
                       }}
                     >
-                      Hammasini o'chirish
-                    </div>
+                      <Trash className="h-4 w-4 mr-1" />
+                      Tozalash
+                    </Button>
                   )}
                 </div>
               </div>
-              <div id="annotations-list" className="w-full mt-2">
+              <div id="annotations-list" className="w-full mt-4 space-y-2">
                 {objects
                   .filter((obj) => obj.completed)
                   .map((object) => (
                     <Collapsible key={object.id} className="group/collapsible">
-                      <div className="annotation-item group/menu-item relative py-2 px-0">
+                      <div className="annotation-item group/menu-item relative bg-white border border-slate-200 rounded-lg shadow-sm hover:shadow-md transition-all duration-200">
                         <CollapsibleTrigger asChild>
-                          <SidebarMenuButton asChild className="w-full justify-start">
+                          <div className="p-4 cursor-pointer hover:bg-slate-50 rounded-lg transition-colors">
                             <div className="flex items-center justify-between w-full">
-                              <div className="annotation-name flex items-center">
-                                <ChevronDown className="annotation-arrow mr-2 h-4 w-4 transition-transform group-data-[state=open]/collapsible:rotate-180" />
-                                {getAnnotationIcon(object)}
-                                <span
-                                  className="ml-2 overflow-hidden text-ellipsis whitespace-nowrap text-sm font-medium text-black cursor-pointer"
-                                  onClick={() => onFocusLayer(object.id)}
-                                >
-                                  {object.name}
-                                </span>
+                              <div className="annotation-name flex items-center flex-1">
+                                <ChevronDown className="annotation-arrow mr-3 h-4 w-4 text-slate-400 transition-transform group-data-[state=open]/collapsible:rotate-180" />
+                                <div className="mr-3">{getAnnotationIcon(object)}</div>
+                                <div className="flex-1 min-w-0">
+                                  <span
+                                    className="block text-sm font-semibold text-slate-800 cursor-pointer hover:text-blue-600 transition-colors truncate"
+                                    onClick={(e) => {
+                                      e.stopPropagation()
+                                      onFocusLayer(object.id)
+                                    }}
+                                  >
+                                    {object.name}
+                                  </span>
+                                  <span className="text-xs text-slate-500 block mt-1">
+                                    {users.find((u) => u.id === object.user)?.name || "Anonim"}
+                                  </span>
+                                </div>
                               </div>
-                              <div className="text-xs text-gray-500 mr-2">
-                                {users.find((u) => u.id === object.createdBy)?.name || "Anonim"}
-                              </div>
-                              <Trash // Plus o'rniga Trash iconi
-                                className="delete-layer h-4 w-4 cursor-pointer text-gray-500 opacity-0 transition-opacity duration-200 group-hover/menu-item:opacity-100"
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                className="h-8 w-8 p-0 text-slate-400 hover:text-red-500 hover:bg-red-50 opacity-0 group-hover/menu-item:opacity-100 transition-all"
                                 onClick={(e) => {
                                   e.stopPropagation()
                                   onDeleteObject(object.id)
                                 }}
-                              />
+                              >
+                                <Trash className="h-4 w-4" />
+                              </Button>
                             </div>
-                          </SidebarMenuButton>
+                          </div>
                         </CollapsibleTrigger>
                         <CollapsibleContent>
-                          <div className="annotation-details ml-[43px] pb-1 text-xs">
+                          <div className="annotation-details px-4 pb-4 border-t border-slate-100 bg-slate-50/30">
                             {object.desc && (
-                              <div className="annotation-description text-gray-600 mb-1">{object.desc}</div>
+                              <div className="annotation-description text-slate-600 mb-3 pt-3 text-sm leading-relaxed bg-white p-3 rounded-md border border-slate-100">
+                                {object.desc}
+                              </div>
                             )}
-                            <div className="annotation-data text-gray-600">
+                            <div className="annotation-data pt-3 flex flex-wrap gap-2">
                               {object.type === "marker" && object.lat && object.lng && (
-                                <div className="annotation-data-field inline-flex items-center mr-2">
+                                <div className="annotation-data-field inline-flex items-center px-3 py-1 bg-blue-100 text-blue-800 rounded-full text-xs font-medium">
                                   <MapPin className="mr-1 h-3 w-3" />
                                   {object.lat.toFixed(5)}, {object.lng.toFixed(5)}
                                 </div>
                               )}
                               {(object.type === "line" || object.type === "draw") && object.distance !== undefined && (
-                                <div className="annotation-data-field inline-flex items-center mr-2">
+                                <div className="annotation-data-field inline-flex items-center px-3 py-1 bg-green-100 text-green-800 rounded-full text-xs font-medium">
                                   <Ruler className="mr-1 h-3 w-3" />
                                   {object.distance} km
                                 </div>
                               )}
                               {object.type === "area" && object.area !== undefined && (
-                                <div className="annotation-data-field inline-flex items-center mr-2">
+                                <div className="annotation-data-field inline-flex items-center px-3 py-1 bg-purple-100 text-purple-800 rounded-full text-xs font-medium">
                                   <Square className="mr-1 h-3 w-3" />
-                                  {object.area} km&sup2;
+                                  {object.area} km²
                                 </div>
                               )}
                               {object.type === "area" && object.distance !== undefined && (
-                                <div className="annotation-data-field inline-flex items-center">
+                                <div className="annotation-data-field inline-flex items-center px-3 py-1 bg-orange-100 text-orange-800 rounded-full text-xs font-medium">
                                   <Ruler className="mr-1 h-3 w-3" />
                                   {object.distance} km
                                 </div>
@@ -373,25 +397,25 @@ export function AppSidebar({
             </div>
           </TabsContent>
 
-          <TabsContent value="group" className="h-full flex flex-col p-4">
+          <TabsContent value="group" className="h-full flex flex-col p-6">
             {currentUser && (
-              <div className="mb-6 p-4 border rounded-lg flex items-center gap-4 bg-gray-50">
+              <div className="mb-6 p-5 border-2 border-slate-200 rounded-xl flex items-center gap-4 bg-gradient-to-r from-blue-50 to-indigo-50 hover:from-blue-100 hover:to-indigo-100 transition-all duration-300">
                 {currentUser.photoURL ? (
                   <Image
                     src={currentUser.photoURL || "/placeholder.svg"}
                     alt={currentUser.displayName || "User avatar"}
-                    width={48}
-                    height={48}
-                    className="rounded-full"
+                    width={56}
+                    height={56}
+                    className="rounded-full border-2 border-white shadow-md"
                   />
                 ) : (
-                  <div className="w-12 h-12 rounded-full bg-blue-500 flex items-center justify-center text-white text-lg font-semibold">
+                  <div className="w-14 h-14 rounded-full bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center text-white text-xl font-bold shadow-md">
                     {currentUser.displayName?.charAt(0).toUpperCase() || "?"}
                   </div>
                 )}
-                <div>
-                  <p className="font-semibold text-lg">{currentUser.displayName || "Anonim foydalanuvchi"}</p>
-                  <p className="text-sm text-gray-600">{currentUser.email}</p>
+                <div className="flex-1">
+                  <p className="font-bold text-xl text-slate-800">{currentUser.displayName || "Anonim foydalanuvchi"}</p>
+                  <p className="text-sm text-slate-600 mt-1">{currentUser.email}</p>
                 </div>
               </div>
             )}
@@ -450,24 +474,34 @@ export function AppSidebar({
 
             {/* Kursor va Joylashuvni kuzatish sozlamalari */}
             {currentUser && (
-              <div className="mt-4 space-y-2">
-                <div className="p-3 border rounded-lg flex items-center justify-between">
-                  <Label htmlFor="cursor-broadcast" className="flex items-center gap-2 text-sm font-medium">
-                    {isBroadcastingCursor ? <Eye className="h-4 w-4" /> : <EyeOff className="h-4 w-4" />}
-                    Kursorimni ko'rsatish
+              <div className="mt-6 space-y-4">
+                <div className="p-4 border-2 border-slate-200 rounded-xl flex items-center justify-between hover:border-slate-300 transition-colors bg-white">
+                  <Label htmlFor="cursor-broadcast" className="flex items-center gap-3 text-sm font-semibold text-slate-700 cursor-pointer">
+                    <div className={`p-2 rounded-full ${isBroadcastingCursor ? 'bg-green-100 text-green-600' : 'bg-gray-100 text-gray-500'}`}>
+                      {isBroadcastingCursor ? <Eye className="h-4 w-4" /> : <EyeOff className="h-4 w-4" />}
+                    </div>
+                    <span>Kursorimni ko'rsatish</span>
                   </Label>
-                  <Switch id="cursor-broadcast" checked={isBroadcastingCursor} onCheckedChange={handleToggleMyCursor} />
+                  <Switch
+                    id="cursor-broadcast"
+                    checked={isBroadcastingCursor}
+                    onCheckedChange={handleToggleMyCursor}
+                    className="data-[state=checked]:bg-green-500"
+                  />
                 </div>
 
-                <div className="p-3 border rounded-lg flex items-center justify-between">
-                  <Label htmlFor="location-tracking" className="flex items-center gap-2 text-sm font-medium">
-                    <Navigation className="h-4 w-4" />
-                    Joylashuvni kuzatish
+                <div className="p-4 border-2 border-slate-200 rounded-xl flex items-center justify-between hover:border-slate-300 transition-colors bg-white">
+                  <Label htmlFor="location-tracking" className="flex items-center gap-3 text-sm font-semibold text-slate-700 cursor-pointer">
+                    <div className={`p-2 rounded-full ${isLocationTracking ? 'bg-blue-100 text-blue-600' : 'bg-gray-100 text-gray-500'}`}>
+                      <Navigation className="h-4 w-4" />
+                    </div>
+                    <span>Joylashuvni kuzatish</span>
                   </Label>
                   <Switch
                     id="location-tracking"
                     checked={isLocationTracking}
                     onCheckedChange={onToggleLocationTracking}
+                    className="data-[state=checked]:bg-blue-500"
                   />
                 </div>
 
@@ -490,8 +524,8 @@ export function AppSidebar({
                 {isLocationTracking && currentUserData?.realLocation && otherActiveUsersWithLocation.length > 0 && (
                   <Collapsible className="group/collapsible">
                     <div className="p-3 border rounded-lg">
-                      <CollapsibleTrigger asChild>
-                        <SidebarMenuButton asChild className="w-full justify-start">
+                      <CollapsibleTrigger asChild className="w-full justify-start">
+                        <SidebarMenuButton>
                           <div className="flex items-center justify-between w-full">
                             <div className="flex items-center gap-2">
                               <Users className="h-4 w-4" />
@@ -565,22 +599,21 @@ export function AppSidebar({
             </div>
           </TabsContent>
         </ScrollArea>
-      </Tabs>
-
-      {/* Chiqish tugmasi va Attribution (eng pastda fiksirlangan) */}
-      <div className="p-4 border-t border-gray-200">
+    </Tabs>
+    {/* Chiqish tugmasi va Attribution (eng pastda fiksirlangan) */}
+    <div className="p-6 border-t border-slate-200 bg-gradient-to-t from-slate-50 to-white">
         {currentUser && (
           <Button
             onClick={onLogout}
-            className="w-full flex items-center justify-center gap-2 h-10 bg-red-500 text-white hover:bg-red-600 mb-2"
+            className="w-full flex items-center justify-center gap-3 h-12 bg-gradient-to-r from-red-500 to-red-600 text-white hover:from-red-600 hover:to-red-700 mb-4 rounded-xl font-semibold shadow-md hover:shadow-lg transition-all duration-300"
           >
-            <LogOut className="h-4 w-4" />
+            <LogOut className="h-5 w-5" />
             Chiqish
           </Button>
         )}
-        <div id="attribution" className="text-xs font-medium text-gray-600 text-center">
+        <div id="attribution" className="text-xs font-medium text-slate-500 text-center bg-white p-2 rounded-lg border border-slate-200">
           ©{" "}
-          <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener noreferrer">
+          <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:text-blue-800 transition-colors">
             OpenStreetMap
           </a>{" "}
           contributors

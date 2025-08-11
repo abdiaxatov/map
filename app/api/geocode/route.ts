@@ -8,7 +8,7 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: "Missing query" }, { status: 400 })
   }
 
-  const url = `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(q)}&format=json&limit=1`
+  const url = `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(q)}&format=json&limit=8&addressdetails=1&accept-language=uz,ru,en&extratags=1&namedetails=1`
 
   try {
     const upstream = await fetch(url, {
@@ -31,6 +31,7 @@ export async function GET(req: NextRequest) {
     const data = await upstream.json()
     return NextResponse.json(data)
   } catch (err) {
+    console.error("Geocoding API error:", err)
     return NextResponse.json({ error: "Geocoding failed" }, { status: 500 })
   }
 }

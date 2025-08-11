@@ -29,9 +29,22 @@ export function SearchBox({ onSearchPanTo }: SearchBoxProps) {
 
     try {
       const query = encodeURIComponent(searchTerm.trim())
-      const response = await fetch(
-        `https://nominatim.openstreetmap.org/search?q=${query}&format=json&limit=8&addressdetails=1&accept-language=uz,ru,en&extratags=1&namedetails=1`,
-      )
+      
+      // Try using the internal API first, fallback to direct API
+      let response
+      try {
+        response = await fetch(`/api/geocode?q=${query}`)
+      } catch (internalError) {
+        console.log("Internal API failed, using direct API:", internalError)
+        response = await fetch(
+          `https://nominatim.openstreetmap.org/search?q=${query}&format=json&limit=8&addressdetails=1&accept-language=uz,ru,en&extratags=1&namedetails=1`,
+          {
+            headers: {
+              'User-Agent': 'MapApp/1.0',
+            },
+          }
+        )
+      }
 
       if (!response.ok) {
         throw new Error(`HTTP error! status: ${response.status}`)
@@ -40,7 +53,7 @@ export function SearchBox({ onSearchPanTo }: SearchBoxProps) {
       const data = await response.json()
       console.log("Raw API response:", data)
 
-      if (data && data.length > 0) {
+      if (data && Array.isArray(data) && data.length > 0) {
         setSearchResults(data)
         setShowResults(true)
         console.log("Search results found:", data.length)
@@ -53,6 +66,9 @@ export function SearchBox({ onSearchPanTo }: SearchBoxProps) {
       console.error("Error during search:", error)
       setSearchResults([])
       setShowResults(false)
+      
+      // Show user-friendly error message
+      alert("Qidirishda xatolik yuz berdi. Iltimos, qayta urinib ko'ring.")
     } finally {
       setIsLoading(false)
     }
@@ -152,7 +168,7 @@ export function SearchBox({ onSearchPanTo }: SearchBoxProps) {
       <div className="relative h-12 rounded-md bg-white shadow-md">
         <Input
           id="search-input"
-          placeholder="Joylashuvni qidiring... (masalan: USA, London, Tokyo)"
+          placeholder="Joylashuvni qidiring... (masalan: USA, Toshkent, London)"
           className="h-full w-full rounded-md border-none pl-4 pr-10 text-sm font-medium text-gray-700 focus-visible:ring-0 focus-visible:ring-offset-0"
           value={searchTerm}
           onChange={handleInputChange}

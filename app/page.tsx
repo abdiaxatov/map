@@ -314,8 +314,14 @@ export default function MapPage() {
   }
 
   const handleSearchPanTo = useCallback((lat: number, lng: number, zoom?: number) => {
+    console.log("handleSearchPanTo called with:", { lat, lng, zoom })
+    console.log("mapComponentRef.current:", mapComponentRef.current)
+
     if (mapComponentRef.current) {
+      console.log("Calling panTo on map component")
       mapComponentRef.current.panTo(lat, lng, zoom)
+    } else {
+      console.error("Map component ref is null!")
     }
   }, [])
 
