@@ -950,6 +950,57 @@ div.firebase-emulator-warning {
   display: none !important;
 }
 
+/* Added new user cursor marker styles */
+.user-cursor-marker {
+  pointer-events: auto !important;
+  cursor: pointer !important;
+}
+
+.user-cursor-container {
+  transition: transform 0.2s ease;
+}
+
+.user-cursor-container:hover {
+  transform: scale(1.1);
+}
+
+.user-cursor-container:hover .user-cursor-name-hover {
+  opacity: 1 !important;
+  visibility: visible !important;
+}
+
+.user-cursor-icon {
+  transition: all 0.2s ease;
+}
+
+.user-cursor-name {
+  animation: fadeInUp 0.3s ease;
+  transition: all 0.2s ease;
+}
+
+/* Hover-only name display styles */
+.user-cursor-name-hover {
+  opacity: 0 !important;
+  visibility: hidden !important;
+  transition: opacity 0.2s ease, visibility 0.2s ease !important;
+  pointer-events: none !important;
+}
+
+.user-cursor-tooltip {
+  background: rgba(0, 0, 0, 0.8) !important;
+  color: white !important;
+  border: none !important;
+  border-radius: 6px !important;
+  padding: 8px 12px !important;
+  font-size: 12px !important;
+  font-weight: 500 !important;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3) !important;
+}
+
+.user-cursor-tooltip::before {
+  border-top-color: rgba(0, 0, 0, 0.8) !important;
+}
+
 /* Popup for naming markers, lines, and areas */
 .create-shape-flow {
   background-color: #fff;
@@ -1103,4 +1154,154 @@ h3 img {
   user-select: none;
   /* Non-prefixed version, currently
                                 supported by Chrome, Edge, Opera and Firefox */
+}
+
+/* Adding modern drawing controls animations and styles */
+@keyframes pulse {
+  0%,
+  100% {
+    transform: scale(1);
+    opacity: 1;
+  }
+  50% {
+    transform: scale(1.1);
+    opacity: 0.8;
+  }
+}
+
+@keyframes bounce {
+  0%,
+  20%,
+  50%,
+  80%,
+  100% {
+    transform: translateY(0);
+  }
+  40% {
+    transform: translateY(-5px);
+  }
+  60% {
+    transform: translateY(-3px);
+  }
+}
+
+/* Modern drawing hint markers */
+.drawing-hint-marker {
+  pointer-events: none;
+}
+
+/* Modern tooltip styles for drawing tools */
+.drawing-tooltip {
+  background: rgba(0, 0, 0, 0.85) !important;
+  color: white !important;
+  border: none !important;
+  border-radius: 8px !important;
+  padding: 8px 12px !important;
+  font-size: 12px !important;
+  font-weight: 500 !important;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3) !important;
+  backdrop-filter: blur(8px) !important;
+}
+
+.drawing-tooltip:before {
+  border-top-color: rgba(0, 0, 0, 0.85) !important;
+}
+
+/* Modern shape creation form */
+.modern-tooltip {
+  background: white !important;
+  border: 1px solid #e5e7eb !important;
+  border-radius: 12px !important;
+  box-shadow: 0 10px 25px rgba(0, 0, 0, 0.15) !important;
+  padding: 0 !important;
+}
+
+.modern-tooltip .shape-form {
+  padding: 20px;
+  min-width: 280px;
+}
+
+.modern-tooltip .shape-form label {
+  display: block;
+  font-weight: 600;
+  font-size: 14px;
+  color: #374151;
+  margin-bottom: 6px;
+  margin-top: 16px;
+}
+
+.modern-tooltip .shape-form label:first-child {
+  margin-top: 0;
+}
+
+.modern-tooltip .shape-form input,
+.modern-tooltip .shape-form textarea {
+  width: 100%;
+  padding: 10px 12px;
+  border: 2px solid #e5e7eb;
+  border-radius: 8px;
+  font-size: 14px;
+  transition: border-color 0.2s ease;
+  box-sizing: border-box;
+}
+
+.modern-tooltip .shape-form input:focus,
+.modern-tooltip .shape-form textarea:focus {
+  outline: none;
+  border-color: #3b82f6;
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+}
+
+.modern-tooltip .shape-form textarea {
+  resize: vertical;
+  min-height: 60px;
+}
+
+.modern-tooltip .shape-info {
+  background: #f3f4f6;
+  padding: 8px 12px;
+  border-radius: 6px;
+  font-size: 13px;
+  color: #6b7280;
+  margin-top: 12px;
+  font-weight: 500;
+}
+
+.modern-tooltip .shape-buttons {
+  display: flex;
+  gap: 10px;
+  margin-top: 20px;
+  justify-content: flex-end;
+}
+
+.modern-tooltip .cancel-button,
+.modern-tooltip .save-button {
+  padding: 10px 20px;
+  border: none;
+  border-radius: 8px;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.modern-tooltip .cancel-button {
+  background: #f3f4f6;
+  color: #6b7280;
+}
+
+.modern-tooltip .cancel-button:hover {
+  background: #e5e7eb;
+  color: #374151;
+}
+
+.modern-tooltip .save-button {
+  background: #3b82f6;
+  color: white;
+}
+
+.modern-tooltip .save-button:hover {
+  background: #2563eb;
+  transform: translateY(-1px);
+  box-shadow: 0 4px 8px rgba(59, 130, 246, 0.3);
 }

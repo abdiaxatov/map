@@ -80,7 +80,28 @@ export default function MapPage() {
   const [showMoreMenu, setShowMoreMenu] = useState(false)
   const [showCreateGroup, setShowCreateGroup] = useState(false)
   const [showGroupManagement, setShowGroupManagement] = useState(false)
-  const [activeTool, setActiveTool] = useState<"cursor" | "pen" | "eraser" | "marker" | "area" | "path">("cursor")
+  const [activeTool, setActiveTool] = useState<
+    | "cursor"
+    | "pen"
+    | "eraser"
+    | "marker"
+    | "area"
+    | "path"
+    | "circle"
+    | "triangle"
+    | "polygon"
+    | "star"
+    | "heart"
+    | "arrow"
+    | "text"
+    | "brush"
+    | "highlighter"
+    | "fill"
+    | "ruler"
+    | "compass"
+    | "area-measure"
+    | "crosshair"
+  >("cursor")
   const [drawingColor, setDrawingColor] = useState("#634FF1")
   const [observingUser, setObservingUser] = useState<UserCursor | null>(null)
   const [hideAnnotations, setHideAnnotations] = useState(false)
@@ -282,6 +303,9 @@ export default function MapPage() {
     const targetUser = users.find((u) => u.id === userId)
     if (targetUser && targetUser.id !== user?.uid) {
       setObservingUser(targetUser)
+      if (mapComponentRef.current) {
+        mapComponentRef.current.panTo(targetUser.lat, targetUser.lng, mapComponentRef.current.getZoom?.() || 13)
+      }
     }
   }
 
@@ -382,6 +406,57 @@ export default function MapPage() {
   const handleAccessDenied = () => {
     setShowAccessDenied(false)
     router.push("/")
+  }
+
+  const handleScreenshot = () => {
+    mapComponentRef.current?.takeScreenshot()
+  }
+
+  const handleExport = () => {
+    mapComponentRef.current?.exportMapData()
+  }
+
+  const handleImport = () => {
+    mapComponentRef.current?.importMapData()
+  }
+
+  const handleUndo = () => {
+    // Undo functionality would be implemented here
+    console.log("Undo action")
+  }
+
+  const handleRedo = () => {
+    // Redo functionality would be implemented here
+    console.log("Redo action")
+  }
+
+  const handleClear = () => {
+    // Clear all objects functionality
+    if (confirm("Are you sure you want to clear all drawings?")) {
+      objects.forEach((obj) => {
+        deleteMapObject(obj.id)
+      })
+    }
+  }
+
+  const handleZoomIn = () => {
+    mapComponentRef.current?.zoomIn()
+  }
+
+  const handleZoomOut = () => {
+    mapComponentRef.current?.zoomOut()
+  }
+
+  const handleFitScreen = () => {
+    mapComponentRef.current?.fitToScreen()
+  }
+
+  const handleToggleGrid = () => {
+    mapComponentRef.current?.toggleGrid()
+  }
+
+  const handleLocate = () => {
+    mapComponentRef.current?.locateUser()
   }
 
   if (authLoading || mapDataLoading) {
@@ -519,6 +594,7 @@ export default function MapPage() {
             exportGeoJSONRef={exportGeoJSONRef}
             hasAccess={hasAccess}
             mapDetails={mapDetails}
+            onObserveUser={handleObserveUser}
           />
           <SearchBox onSearchPanTo={handleSearchPanTo} />
 
@@ -528,6 +604,17 @@ export default function MapPage() {
               onToolChange={handleToolChange}
               drawingColor={drawingColor}
               onColorChange={handleColorChange}
+              onScreenshot={handleScreenshot}
+              onExport={handleExport}
+              onImport={handleImport}
+              onUndo={handleUndo}
+              onRedo={handleRedo}
+              onClear={handleClear}
+              onZoomIn={handleZoomIn}
+              onZoomOut={handleZoomOut}
+              onFitScreen={handleFitScreen}
+              onToggleGrid={handleToggleGrid}
+              onLocate={handleLocate}
             />
           )}
           <LocationControl />

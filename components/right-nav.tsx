@@ -44,7 +44,7 @@ export function RightNav({
   }
 
   return (
-    <div id="right-nav" className="absolute right-5 top-[15px] z-[40] flex items-center space-x-2">
+    <div id="right-nav" className="absolute right-[10px] top-[15px] z-[40] flex items-center space-x-2">
       {isObservingActiveUser && (
         <Button
           id="stop-observing-button"
