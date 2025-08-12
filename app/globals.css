@@ -662,8 +662,8 @@ th img {
 /* Right side of the nav bar */
 #right-nav {
   position: absolute;
-  z-index: 9999;
-  right: 20px;
+  z-index: 99;
+  right: 390px;
   top: 15px;
   vertical-align: middle;
 }
@@ -682,6 +682,7 @@ th img {
   font-weight: 700;
   vertical-align: middle;
   font-size: 14px;
+  padding: 0 12px;
 }
 
 #share-button:hover {

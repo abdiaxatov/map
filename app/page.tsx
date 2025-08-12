@@ -28,9 +28,9 @@ import { Menu } from "lucide-react"
 import { AccessRequestModal } from "@/components/access-request-modal"
 import { AccessDeniedModal } from "@/components/access-denied-modal"
 import { AccessWaitingModal } from "@/components/access-waiting-modal"
-import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet"
-import { UserListModal } from "@/components/user-list-modal"
-import { RightNav } from "@/components/right-nav"
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog"
+import { RightNav } from "@/components/right-nav" // Import RightNav component
+import { UserListModal } from "@/components/user-list-modal" // Import UserListModal component
 
 // Dynamically import MapComponent with SSR disabled
 const MapComponent = dynamic(() => import("@/components/map-component").then((mod) => mod.MapComponent), {
@@ -538,17 +538,17 @@ export default function MapPage() {
   return (
     <div className="relative flex h-screen w-full overflow-hidden">
       {/* Sidebar Trigger Button (always visible) */}
-      <Sheet open={isSidebarOpen} onOpenChange={setIsSidebarOpen}>
-        <SheetTrigger asChild>
+      <Dialog open={isSidebarOpen} onOpenChange={setIsSidebarOpen}>
+        <DialogTrigger asChild>
           <Button className="fixed top-4 left-4 z-[50] bg-white text-gray-700 shadow-md" size="icon">
             <Menu className="h-5 w-5" />
             <span className="sr-only">Menyuni ochish</span>
           </Button>
-        </SheetTrigger>
-        <SheetContent side="left" className="w-full max-w-[338px] p-0 flex flex-col">
-          <SheetHeader>
-            <SheetTitle className="sr-only">Menyu</SheetTitle>
-          </SheetHeader>
+        </DialogTrigger>
+        <DialogContent className="w-full max-w-none h-full p-0 flex flex-col m-0 rounded-none">
+          <DialogHeader>
+            <DialogTitle className="sr-only">Menyu</DialogTitle>
+          </DialogHeader>
           <AppSidebar
             mapName={mapDetails?.name || "Yuklanmoqda..."}
             mapDescription={mapDetails?.description || "Yuklanmoqda..."}
@@ -568,8 +568,8 @@ export default function MapPage() {
             isLocationTracking={isLocationTracking}
             currentUserData={currentUserData}
           />
-        </SheetContent>
-      </Sheet>
+        </DialogContent>
+      </Dialog>
 
       {/* Main Content Area - Map and Chat will now be side-by-side */}
       <main className="relative flex flex-1 h-full w-full">

@@ -41,18 +41,6 @@ export function SidebarMenuItem({ className, ...props }: React.HTMLAttributes<HT
   return <div className={cn("py-2 px-4 hover:bg-gray-50 cursor-pointer", className)} {...props} />
 }
 
-export function SidebarMenuButton({ className, ...props }: React.HTMLAttributes<HTMLButtonElement>) {
-  return (
-    <button
-      className={cn(
-        "flex w-full items-center justify-between text-left text-sm font-medium text-gray-700 focus:outline-none",
-        className,
-      )}
-      {...props}
-    />
-  )
-}
-
 // Removed SidebarRail, SidebarTrigger, SidebarProvider, useSidebar as they are no longer needed for this modal approach
 
 const SidebarInset = React.forwardRef<HTMLDivElement, React.ComponentProps<"main">>(({ className, ...props }, ref) => {
@@ -299,4 +287,5 @@ export {
   SidebarMenuSubButton,
   SidebarMenuSubItem,
   SidebarSeparator,
+  SidebarMenuButtonComponent as SidebarMenuButton,
 }
