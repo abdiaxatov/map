@@ -6,6 +6,9 @@ import type { UserCursor, MapObject, RoomDetails } from "@/hooks/use-map-data"
 import { useRef, useEffect, useState, useImperativeHandle, forwardRef } from "react"
 import L from "leaflet"
 import "@geoman-io/leaflet-geoman-free"
+import { MarkerTool } from "./drawing-tools/marker-tool"
+import { PenTool } from "./drawing-tools/pen-tool"
+import { ShapeTools } from "./drawing-tools/shape-tools"
 
 import "leaflet/dist/leaflet.css"
 import "@geoman-io/leaflet-geoman-free/dist/leaflet-geoman.css"
@@ -106,6 +109,7 @@ export const MapComponent = forwardRef<MapComponentRef, MapComponentProps>(funct
     onUpdateMapObject,
     onDeleteMapObject,
     onAddDrawingCoordinate,
+    onStopObserving,
     exportGeoJSONRef,
     hasAccess,
     mapDetails,
@@ -125,6 +129,40 @@ export const MapComponent = forwardRef<MapComponentRef, MapComponentProps>(funct
   const mapObjectsRef = useRef<LeafletMapObject[]>([])
   const drawingHintMarkerRef = useRef<L.Marker | null>(null)
   const [geomanLoaded, setGeomanLoaded] = useState(false)
+  const [selectedObjectId, setSelectedObjectId] = useState<string | null>(null)
+  const [editMode, setEditMode] = useState(false)
+  const [draggedObject, setDraggedObject] = useState<string | null>(null)
+
+  const handleToolComplete = () => {
+    // Switch back to cursor tool after completing any drawing action
+    if (typeof window !== "undefined") {
+      window.dispatchEvent(new CustomEvent("switchToCursor"))
+    }
+  }
+
+  const markerTool = MarkerTool({
+    mapRef,
+    drawingColor,
+    onAddMapObject,
+    onUpdateMapObject,
+    onToolComplete: handleToolComplete,
+  })
+
+  const penTool = PenTool({
+    mapRef,
+    drawingColor,
+    onAddMapObject,
+    onUpdateMapObject,
+    onAddDrawingCoordinate,
+  })
+
+  const shapeTools = ShapeTools({
+    mapRef,
+    drawingColor,
+    onAddMapObject,
+    onUpdateMapObject,
+    onToolComplete: handleToolComplete,
+  })
 
   const handleMouseMove = (e: L.LeafletMouseEvent) => {
     const { lat, lng } = e.latlng
@@ -132,13 +170,22 @@ export const MapComponent = forwardRef<MapComponentRef, MapComponentProps>(funct
     const roundedLng = Number.parseFloat(lng.toFixed(5))
 
     // Update drawing hint marker position
-    if (drawingHintMarkerRef.current && (activeTool === "pen" || activeTool === "area" || activeTool === "path")) {
+    if (
+      drawingHintMarkerRef.current &&
+      (activeTool === "pen" ||
+        activeTool === "area" ||
+        activeTool === "path" ||
+        activeTool === "marker" ||
+        activeTool === "text" ||
+        activeTool === "circle" ||
+        activeTool === "triangle" ||
+        activeTool === "polygon")
+    ) {
       drawingHintMarkerRef.current.setLatLng([lat, lng])
     }
 
-    // Continue drawing for pen tool
-    if (activeTool === "pen" && isMouseDown.current && currentDrawingObjectId.current) {
-      onAddDrawingCoordinate(currentDrawingObjectId.current, roundedLat, roundedLng)
+    if (activeTool === "pen") {
+      penTool.handleMouseMove(e)
     }
 
     // Update current user location
@@ -149,41 +196,28 @@ export const MapComponent = forwardRef<MapComponentRef, MapComponentProps>(funct
 
   const handleMouseDown = (e: L.LeafletMouseEvent) => {
     if (!currentUser) return
-    isMouseDown.current = true
-    if (activeTool === "pen") {
-      const { lat, lng } = e.latlng
-      const roundedLat = Number.parseFloat(lat.toFixed(5))
-      const roundedLng = Number.parseFloat(lng.toFixed(5))
 
-      const startDrawing = async (lat: number, lng: number) => {
-        const newObjectId = await onAddMapObject({
-          color: drawingColor,
-          initlat: lat,
-          initlng: lng,
-          type: "draw",
-          name: "Drawing",
-          desc: "",
-          distance: 0,
-          area: 0,
-        })
-        if (newObjectId) {
-          currentDrawingObjectId.current = newObjectId
-          onAddDrawingCoordinate(newObjectId, lat, lng)
-        }
+    if (activeTool === "pen") {
+      if (mapRef.current) {
+        mapRef.current.dragging.disable()
       }
-      startDrawing(roundedLat, roundedLng)
+      penTool.handleMouseDown(e)
     }
   }
 
   const handleMouseUp = () => {
-    isMouseDown.current = false
-    if (activeTool === "pen" && currentDrawingObjectId.current) {
-      onUpdateMapObject(currentDrawingObjectId.current, { completed: true })
-      currentDrawingObjectId.current = null
+    if (activeTool === "pen") {
+      penTool.handleMouseUp()
+      if (mapRef.current) {
+        mapRef.current.dragging.enable()
+      }
     }
   }
 
-  const handleClick = (e: L.LeafletMouseEvent) => {
+  const handleMapClick = async (e: L.LeafletMouseEvent) => {
+    setSelectedObjectId(null)
+    setEditMode(false)
+
     if (!currentUser) return
 
     const { lat, lng } = e.latlng
@@ -191,398 +225,258 @@ export const MapComponent = forwardRef<MapComponentRef, MapComponentProps>(funct
     const roundedLng = Number.parseFloat(lng.toFixed(5))
 
     switch (activeTool) {
+      case "eraser":
+        const clickedObjects = mapObjectsRef.current.filter((obj) => {
+          if (obj.leafletLayer) {
+            if (obj.leafletLayer instanceof L.Marker) {
+              const markerLatLng = obj.leafletLayer.getLatLng()
+              const distance = mapRef.current?.distance([roundedLat, roundedLng], [markerLatLng.lat, markerLatLng.lng])
+              return distance && distance < 50 // 50 meters tolerance
+            } else if (obj.leafletLayer instanceof L.Polyline || obj.leafletLayer instanceof L.Polygon) {
+              const bounds = obj.leafletLayer.getBounds()
+              return bounds.contains([roundedLat, roundedLng])
+            }
+          }
+          return false
+        })
+
+        if (clickedObjects.length > 0) {
+          // Delete the first found object (or show selection if multiple)
+          const objToDelete = clickedObjects[0]
+          if (objToDelete.user === currentUser.uid) {
+            if (confirm(`"${objToDelete.name || "Obyekt"}" ni o'chirmoqchimisiz?`)) {
+              await onDeleteMapObject(objToDelete.id)
+            }
+          } else {
+            alert("Faqat o'z obyektlaringizni o'chira olasiz!")
+          }
+        }
+        break
       case "marker":
-        createMarker(roundedLat, roundedLng)
+        markerTool.createMarker(roundedLat, roundedLng)
         break
       case "text":
-        createTextMarker(roundedLat, roundedLng)
+        markerTool.createTextMarker(roundedLat, roundedLng)
         break
       case "brush":
-        createBrushStroke(roundedLat, roundedLng)
+        markerTool.createBrushMarker(roundedLat, roundedLng)
         break
       case "highlighter":
-        createHighlighter(roundedLat, roundedLng)
+        markerTool.createHighlighterMarker(roundedLat, roundedLng)
         break
       case "ruler":
-        createRuler(roundedLat, roundedLng)
+        if (!currentDrawingObjectId.current) {
+          // Start new measurement
+          const objectId = await onAddMapObject({
+            type: "line",
+            name: "Masofa o'lchash",
+            desc: "Masofa o'lchash uchun ikkinchi nuqtani tanlang",
+            color: drawingColor,
+            path: [[roundedLat, roundedLng]],
+            distance: 0,
+          })
+          currentDrawingObjectId.current = objectId
+
+          // Show hint marker
+          if (drawingHintMarkerRef.current) {
+            mapRef.current?.removeLayer(drawingHintMarkerRef.current)
+          }
+          drawingHintMarkerRef.current = L.marker([roundedLat, roundedLng], {
+            icon: L.divIcon({
+              className: "ruler-hint-marker",
+              html: '<div style="background: red; width: 8px; height: 8px; border-radius: 50%; border: 2px solid white;"></div>',
+              iconSize: [12, 12],
+              iconAnchor: [6, 6],
+            }),
+          }).addTo(mapRef.current!)
+        } else {
+          // Complete measurement
+          const startObj = objects.find((o) => o.id === currentDrawingObjectId.current)
+          if (startObj && startObj.path && startObj.path.length > 0) {
+            const startPoint = startObj.path[0]
+            const distance = mapRef.current?.distance([startPoint[0], startPoint[1]], [roundedLat, roundedLng]) / 1000 // km
+
+            await onUpdateMapObject(currentDrawingObjectId.current, {
+              path: [startPoint, [roundedLat, roundedLng]],
+              distance: distance,
+              desc: `Masofa: ${distance.toFixed(2)} km`,
+            })
+          }
+
+          currentDrawingObjectId.current = null
+          if (drawingHintMarkerRef.current) {
+            mapRef.current?.removeLayer(drawingHintMarkerRef.current)
+            drawingHintMarkerRef.current = null
+          }
+          handleToolComplete()
+        }
         break
       case "compass":
-        createCompass(roundedLat, roundedLng)
-        break
-      case "area-measure":
-        createAreaMeasure(roundedLat, roundedLng)
+        markerTool.createCompassMarker(roundedLat, roundedLng)
         break
       case "crosshair":
-        createCrosshair(roundedLat, roundedLng)
+        markerTool.createCrosshairMarker(roundedLat, roundedLng)
         break
       case "arrow":
-        createArrow(roundedLat, roundedLng)
+        markerTool.createArrowMarker(roundedLat, roundedLng)
         break
       case "fill":
-        createFillArea(roundedLat, roundedLng)
+        markerTool.createFillMarker(roundedLat, roundedLng)
+        break
+      case "circle":
+        shapeTools.createCircle(roundedLat, roundedLng)
+        break
+      case "triangle":
+        shapeTools.createTriangle(roundedLat, roundedLng)
+        break
+      case "polygon":
+        shapeTools.createPolygon(roundedLat, roundedLng)
+        break
+      case "star":
+        shapeTools.createStar(roundedLat, roundedLng)
+        break
+      case "heart":
+        shapeTools.createHeart(roundedLat, roundedLng)
+        break
+      case "area":
+        if (geomanLoaded && (mapRef.current as any).pm) {
+          ;(mapRef.current as any).pm.enableDraw("Rectangle", {
+            templineStyle: { color: drawingColor },
+            hintlineStyle: { color: drawingColor, dashArray: [5, 5] },
+            pathOptions: { color: drawingColor, fillColor: drawingColor, fillOpacity: 0.3 },
+          })
+        }
+        break
+      case "path":
+        if (geomanLoaded && (mapRef.current as any).pm) {
+          ;(mapRef.current as any).pm.enableDraw("Line", {
+            templineStyle: { color: drawingColor },
+            hintlineStyle: { color: drawingColor, dashArray: [5, 5] },
+            pathOptions: { color: drawingColor },
+          })
+        }
+        break
+      default:
+        // Do nothing for cursor tool
         break
     }
   }
 
-  const createMarker = async (lat: number, lng: number) => {
-    const newObjectId = await onAddMapObject({
-      color: drawingColor,
-      lat: lat,
-      lng: lng,
-      type: "marker",
-      name: "Marker",
-      desc: "",
-    })
+  const handleObjectClick = (objectId: string, e: L.LeafletEvent) => {
+    e.originalEvent?.stopPropagation()
 
-    if (newObjectId) {
-      const tempMarker = L.marker([lat, lng], {
-        icon: L.divIcon({
-          className: "custom-marker",
-          html: `<div style="width: 24px; height: 24px; background: ${drawingColor}; border: 3px solid white; border-radius: 50%; box-shadow: 0 2px 8px rgba(0,0,0,0.3); position: relative;"><div style="position: absolute; top: -8px; left: 50%; transform: translateX(-50%); width: 0; height: 0; border-left: 6px solid transparent; border-right: 6px solid transparent; border-bottom: 8px solid ${drawingColor};"></div></div>`,
-          iconSize: [24, 32],
-          iconAnchor: [12, 32],
-        }),
-        zIndexOffset: 9999,
-        interactive: false,
-      }).addTo(mapRef.current!)
-
-      showMarkerModal(tempMarker, newObjectId, "Marker", "")
+    if (selectedObjectId === objectId) {
+      // Toggle edit mode if same object clicked
+      setEditMode(!editMode)
+    } else {
+      // Select new object
+      setSelectedObjectId(objectId)
+      setEditMode(true)
     }
   }
 
-  const createTextMarker = async (lat: number, lng: number) => {
-    const newObjectId = await onAddMapObject({
-      color: drawingColor,
-      lat: lat,
-      lng: lng,
-      type: "text",
-      name: "Text",
-      desc: "",
-    })
-
-    if (newObjectId) {
-      const textMarker = L.marker([lat, lng], {
-        icon: L.divIcon({
-          className: "text-marker",
-          html: `<div style="background: white; padding: 4px 8px; border: 2px solid ${drawingColor}; border-radius: 4px; color: ${drawingColor}; font-weight: bold; white-space: nowrap; box-shadow: 0 2px 8px rgba(0,0,0,0.3);">Text</div>`,
-          iconSize: [60, 30],
-          iconAnchor: [30, 15],
-        }),
-        zIndexOffset: 9999,
-        interactive: false,
-      }).addTo(mapRef.current!)
-
-      showTextModal(textMarker, newObjectId)
-    }
-  }
-
-  const createBrushStroke = async (lat: number, lng: number) => {
-    const newObjectId = await onAddMapObject({
-      color: drawingColor,
-      initlat: lat,
-      initlng: lng,
-      type: "brush",
-      name: "Brush Stroke",
-      desc: "",
-    })
-
-    if (newObjectId) {
-      currentDrawingObjectId.current = newObjectId
-      onAddDrawingCoordinate(newObjectId, lat, lng)
-    }
-  }
-
-  const createHighlighter = async (lat: number, lng: number) => {
-    const newObjectId = await onAddMapObject({
-      color: drawingColor + "80",
-      initlat: lat,
-      initlng: lng,
-      type: "highlighter",
-      name: "Highlight",
-      desc: "",
-    })
-
-    if (newObjectId) {
-      currentDrawingObjectId.current = newObjectId
-      onAddDrawingCoordinate(newObjectId, lat, lng)
-    }
-  }
-
-  const createRuler = async (lat: number, lng: number) => {
-    const newObjectId = await onAddMapObject({
-      color: "#ff0000",
-      initlat: lat,
-      initlng: lng,
-      type: "ruler",
-      name: "Measurement",
-      desc: "",
-    })
-
-    if (newObjectId) {
-      currentDrawingObjectId.current = newObjectId
-      onAddDrawingCoordinate(newObjectId, lat, lng)
-    }
-  }
-
-  const createCompass = async (lat: number, lng: number) => {
-    const newObjectId = await onAddMapObject({
-      color: drawingColor,
-      lat: lat,
-      lng: lng,
-      type: "compass",
-      name: "Compass Point",
-      desc: "",
-    })
-
-    if (newObjectId) {
-      const compassMarker = L.marker([lat, lng], {
-        icon: L.divIcon({
-          className: "compass-marker",
-          html: `<div style="width: 32px; height: 32px; background: ${drawingColor}; border: 3px solid white; border-radius: 50%; box-shadow: 0 2px 8px rgba(0,0,0,0.3); display: flex; align-items: center; justify-content: center; color: white; font-weight: bold; font-size: 16px;">N</div>`,
-          iconSize: [32, 32],
-          iconAnchor: [16, 16],
-        }),
-        zIndexOffset: 9999,
-      }).addTo(mapRef.current!)
-
-      showMarkerModal(compassMarker, newObjectId, "Compass Point", "")
-    }
-  }
-
-  const createAreaMeasure = async (lat: number, lng: number) => {
-    const newObjectId = await onAddMapObject({
-      color: "#00ff00",
-      initlat: lat,
-      initlng: lng,
-      type: "area-measure",
-      name: "Area Measurement",
-      desc: "",
-    })
-
-    if (newObjectId) {
-      currentDrawingObjectId.current = newObjectId
-      onAddDrawingCoordinate(newObjectId, lat, lng)
-    }
-  }
-
-  const createCrosshair = async (lat: number, lng: number) => {
-    const newObjectId = await onAddMapObject({
-      color: drawingColor,
-      lat: lat,
-      lng: lng,
-      type: "crosshair",
-      name: "Crosshair",
-      desc: "",
-    })
-
-    if (newObjectId) {
-      const crosshairMarker = L.marker([lat, lng], {
-        icon: L.divIcon({
-          className: "crosshair-marker",
-          html: `<div style="width: 24px; height: 24px; position: relative;"><div style="position: absolute; top: 50%; left: 0; width: 100%; height: 2px; background: ${drawingColor}; transform: translateY(-50%);"></div><div style="position: absolute; left: 50%; top: 0; height: 100%; width: 2px; background: ${drawingColor}; transform: translateX(-50%);"></div></div>`,
-          iconSize: [24, 24],
-          iconAnchor: [12, 12],
-        }),
-        zIndexOffset: 9999,
-      }).addTo(mapRef.current!)
-
-      showMarkerModal(crosshairMarker, newObjectId, "Crosshair", "")
-    }
-  }
-
-  const createArrow = async (lat: number, lng: number) => {
-    const newObjectId = await onAddMapObject({
-      color: drawingColor,
-      lat: lat,
-      lng: lng,
-      type: "arrow",
-      name: "Arrow",
-      desc: "",
-    })
-
-    if (newObjectId) {
-      const arrowMarker = L.marker([lat, lng], {
-        icon: L.divIcon({
-          className: "arrow-marker",
-          html: `<div style="width: 0; height: 0; border-left: 8px solid transparent; border-right: 8px solid transparent; border-bottom: 20px solid ${drawingColor}; filter: drop-shadow(0 2px 4px rgba(0,0,0,0.3));"></div>`,
-          iconSize: [16, 20],
-          iconAnchor: [8, 20],
-        }),
-        zIndexOffset: 9999,
-      }).addTo(mapRef.current!)
-
-      showMarkerModal(arrowMarker, newObjectId, "Arrow", "")
-    }
-  }
-
-  const createFillArea = async (lat: number, lng: number) => {
-    const newObjectId = await onAddMapObject({
-      color: drawingColor,
-      initlat: lat,
-      initlng: lng,
-      type: "fill",
-      name: "Fill Area",
-      desc: "",
-    })
-
-    if (newObjectId) {
-      currentDrawingObjectId.current = newObjectId
-      onAddDrawingCoordinate(newObjectId, lat, lng)
-    }
-  }
-
-  const showMarkerModal = (marker: L.Marker, objectId: string, defaultName: string, defaultDesc: string) => {
-    marker.bindTooltip(
-      `
-      <label for="shape-name">Name</label>
-      <input value="${defaultName}" id="shape-name" name="shape-name" />
-      <label for="shape-desc">Description</label>
-      <textarea id="shape-desc" name="description">${defaultDesc}</textarea>
-      <br>
-      <div id="buttons">
-        <button class="cancel-button">Cancel</button>
-        <button class="save-button">Save</button>
-      </div>
-      <div class="arrow-down"></div>
-      `,
-      {
-        permanent: true,
-        direction: "top",
-        interactive: true,
-        bubblingMouseEvents: false,
-        className: "create-shape-flow create-form",
-        offset: L.point({ x: 0, y: -35 }),
-      },
-    )
-    marker.openTooltip()
-
-    setTimeout(() => {
-      const nameInput = document.getElementById("shape-name") as HTMLInputElement
-      if (nameInput) {
-        nameInput.focus()
-        nameInput.select()
-      }
-    }, 0)
-
-    const tooltipContainer = marker.getTooltip()?.getElement()
-    if (tooltipContainer) {
-      const saveButton = tooltipContainer.querySelector(".save-button")
-      const cancelButton = tooltipContainer.querySelector(".cancel-button")
-
-      const handleSave = async () => {
-        const name = (tooltipContainer.querySelector("#shape-name") as HTMLInputElement)?.value
-        const desc = (tooltipContainer.querySelector("#shape-desc") as HTMLTextAreaElement)?.value
+  const handleObjectResize = async (objectId: string, newSize: number) => {
+    const obj = objects.find((o) => o.id === objectId)
+    if (obj && obj.user === currentUser?.uid) {
+      try {
+        const clampedSize = Math.max(10, Math.min(200, newSize)) // Increased max size for shapes
         await onUpdateMapObject(objectId, {
-          name: sanitize(name || defaultName),
-          desc: sanitize(desc || ""),
-          completed: true,
+          size: clampedSize,
         })
-        marker.closeTooltip()
+      } catch (error) {
+        console.error("Error resizing object:", error)
       }
-
-      const handleCancel = async () => {
-        await onDeleteMapObject(objectId)
-        marker.closeTooltip()
-        marker.remove()
-      }
-
-      saveButton?.addEventListener("click", handleSave)
-      cancelButton?.addEventListener("click", handleCancel)
-
-      marker.on("tooltipclose", () => {
-        saveButton?.removeEventListener("click", handleSave)
-        cancelButton?.removeEventListener("click", handleCancel)
-      })
     }
   }
 
-  const showTextModal = (marker: L.Marker, objectId: string) => {
-    marker.bindTooltip(
-      `
-      <label for="text-content">Text Content</label>
-      <input value="Text" id="text-content" name="text-content" />
-      <label for="text-desc">Description</label>
-      <textarea id="text-desc" name="description"></textarea>
-      <br>
-      <div id="buttons">
-        <button class="cancel-button">Cancel</button>
-        <button class="save-button">Save</button>
-      </div>
-      <div class="arrow-down"></div>
-      `,
-      {
-        permanent: true,
-        direction: "top",
-        interactive: true,
-        bubblingMouseEvents: false,
-        className: "create-shape-flow create-form",
-        offset: L.point({ x: 0, y: -35 }),
-      },
-    )
-    marker.openTooltip()
-
-    setTimeout(() => {
-      const textInput = document.getElementById("text-content") as HTMLInputElement
-      if (textInput) {
-        textInput.focus()
-        textInput.select()
-      }
-    }, 0)
-
-    const tooltipContainer = marker.getTooltip()?.getElement()
-    if (tooltipContainer) {
-      const saveButton = tooltipContainer.querySelector(".save-button")
-      const cancelButton = tooltipContainer.querySelector(".cancel-button")
-
-      const handleSave = async () => {
-        const textContent = (tooltipContainer.querySelector("#text-content") as HTMLInputElement)?.value
-        const desc = (tooltipContainer.querySelector("#text-desc") as HTMLTextAreaElement)?.value
-
-        marker.setIcon(
-          L.divIcon({
-            className: "text-marker",
-            html: `<div style="background: white; padding: 4px 8px; border: 2px solid ${drawingColor}; border-radius: 4px; color: ${drawingColor}; font-weight: bold; white-space: nowrap; box-shadow: 0 2px 8px rgba(0,0,0,0.3);">${textContent || "Text"}</div>`,
-            iconSize: [Math.max(60, (textContent || "Text").length * 8 + 16), 30],
-            iconAnchor: [Math.max(30, (textContent || "Text").length * 4 + 8), 15],
-          }),
-        )
-
+  const handleObjectDrag = async (objectId: string, newLat: number, newLng: number) => {
+    const obj = objects.find((o) => o.id === objectId)
+    if (obj && obj.user === currentUser?.uid) {
+      try {
         await onUpdateMapObject(objectId, {
-          name: sanitize(textContent || "Text"),
-          desc: sanitize(desc || ""),
-          completed: true,
+          lat: newLat,
+          lng: newLng,
         })
-        marker.closeTooltip()
+      } catch (error) {
+        console.error("Error moving object:", error)
       }
-
-      const handleCancel = () => {
-        marker.closeTooltip()
-        marker.remove()
-        onDeleteMapObject(objectId)
-      }
-
-      saveButton?.addEventListener("click", handleSave)
-      cancelButton?.addEventListener("click", handleCancel)
-
-      marker.on("tooltipclose", () => {
-        saveButton?.removeEventListener("click", handleSave)
-        cancelButton?.removeEventListener("click", handleCancel)
-        marker.remove()
-      })
     }
   }
 
-  const sanitize = (string: string) => {
-    const map: { [key: string]: string } = {
-      "&": "&amp;",
-      "<": "&lt;",
-      ">": "&gt;",
-      '"': "&quot;",
-      "'": "&#x27;",
-      "/": "&#x2F;",
+  const handleEditObject = async (objectId: string) => {
+    const obj = objects.find((o) => o.id === objectId)
+    if (obj && obj.user === currentUser?.uid) {
+      const newName = prompt("Yangi nom kiriting:", obj.name || "")
+      if (newName !== null) {
+        const newDescription = prompt("Yangi tavsif kiriting:", obj.description || "")
+        if (newDescription !== null) {
+          // Ask for coordinate change
+          const changeLocation = confirm("Joylashuvni o'zgartirishni xohlaysizmi?")
+          let newLat = obj.lat
+          let newLng = obj.lng
+
+          if (changeLocation) {
+            const latInput = prompt("Yangi latitude kiriting:", obj.lat.toString())
+            const lngInput = prompt("Yangi longitude kiriting:", obj.lng.toString())
+
+            if (latInput && lngInput) {
+              const parsedLat = Number.parseFloat(latInput)
+              const parsedLng = Number.parseFloat(lngInput)
+
+              if (
+                !isNaN(parsedLat) &&
+                !isNaN(parsedLng) &&
+                parsedLat >= -90 &&
+                parsedLat <= 90 &&
+                parsedLng >= -180 &&
+                parsedLng <= 180
+              ) {
+                newLat = parsedLat
+                newLng = parsedLng
+              } else {
+                alert("Noto'g'ri koordinatalar kiritildi!")
+                return
+              }
+            }
+          }
+
+          try {
+            await onUpdateMapObject(objectId, {
+              name: newName.trim() || obj.name,
+              description: newDescription.trim() || obj.description,
+              lat: newLat,
+              lng: newLng,
+            })
+            setSelectedObjectId(null)
+            setEditMode(false)
+            mapRef.current?.closePopup()
+          } catch (error) {
+            console.error("Error updating object:", error)
+            alert("Obyektni yangilashda xatolik yuz berdi!")
+          }
+        }
+      }
     }
-    const reg = /[&<>"'/]/gi
-    return string.replace(reg, (match) => map[match])
+  }
+
+  const handleDeleteObject = async (objectId: string) => {
+    const obj = objects.find((o) => o.id === objectId)
+    if (obj && obj.user === currentUser?.uid) {
+      if (confirm(`"${obj.name || "Obyekt"}" ni haqiqatan ham o'chirmoqchimisiz?`)) {
+        try {
+          await onDeleteMapObject(objectId)
+          setSelectedObjectId(null)
+          setEditMode(false)
+          mapRef.current?.closePopup()
+          alert("Obyekt muvaffaqiyatli o'chirildi!")
+        } catch (error) {
+          console.error("Error deleting object:", error)
+          alert("Obyektni o'chirishda xatolik yuz berdi!")
+        }
+      }
+    } else {
+      alert("Faqat o'z obyektlaringizni o'chirish mumkin!")
+    }
   }
 
   useImperativeHandle(ref, () => ({
@@ -782,97 +676,56 @@ export const MapComponent = forwardRef<MapComponentRef, MapComponentProps>(funct
 
   useEffect(() => {
     const map = mapRef.current
-    if (!map || !hasAccess) return
+    if (!map || !geomanLoaded || !(map as any).pm) return
 
-    map.on("mousemove", handleMouseMove)
-    map.on("mousedown", handleMouseDown)
-    map.on("mouseup", handleMouseUp)
-    map.on("click", handleClick)
+    const handleGeomanCreate = (e: any) => {
+      const layer = e.layer
+      const shape = e.shape
+
+      if (shape === "Rectangle" || shape === "Polygon") {
+        const bounds = layer.getBounds()
+        const path = [
+          [bounds.getNorth(), bounds.getWest()],
+          [bounds.getNorth(), bounds.getEast()],
+          [bounds.getSouth(), bounds.getEast()],
+          [bounds.getSouth(), bounds.getWest()],
+        ]
+
+        onAddMapObject({
+          type: "area",
+          name: "Hudud",
+          desc: "",
+          color: drawingColor,
+          path: path,
+          area: (layer as any).getArea ? (layer as any).getArea() / 1000000 : 0, // Convert to km²
+        }).then(() => {
+          handleToolComplete()
+        })
+      } else if (shape === "Line") {
+        const latlngs = layer.getLatLngs()
+
+        onAddMapObject({
+          type: "line",
+          name: "Chiziq",
+          desc: "",
+          color: drawingColor,
+          path: latlngs,
+          distance: layer.getDistance ? layer.getDistance() / 1000 : 0, // Convert to km
+        }).then(() => {
+          handleToolComplete()
+        })
+      }
+
+      // Remove the temporary layer
+      map.removeLayer(layer)
+    }
+
+    map.on("pm:create", handleGeomanCreate)
 
     return () => {
-      map.off("mousemove", handleMouseMove)
-      map.off("mousedown", handleMouseDown)
-      map.off("mouseup", handleMouseUp)
-      map.off("click", handleClick)
+      map.off("pm:create", handleGeomanCreate)
     }
-  }, [
-    currentUser,
-    roomId,
-    activeTool,
-    onUpdateCurrentUserLocation,
-    drawingColor,
-    onAddMapObject,
-    onAddDrawingCoordinate,
-    onUpdateMapObject,
-    onDeleteMapObject,
-    hasAccess,
-  ])
-
-  useEffect(() => {
-    const map = mapRef.current
-    if (!map || !geomanLoaded || !(map as any).pm || !hasAccess || !currentUser) return // Clean up previous tool state
-    ;(map as any).pm.disableDraw()
-    ;(map as any).pm.disableGlobalRemovalMode()
-    map.dragging.enable()
-
-    // Remove existing hint marker
-    if (drawingHintMarkerRef.current) {
-      drawingHintMarkerRef.current.remove()
-      drawingHintMarkerRef.current = null
-    }
-
-    switch (activeTool) {
-      case "cursor":
-        map.dragging.enable()
-        break
-
-      case "pen":
-        map.dragging.disable()
-        drawingHintMarkerRef.current = L.marker([0, 0], {
-          icon: L.divIcon({
-            className: "drawing-hint-marker",
-            html: `<div style="width: 16px; height: 16px; background: ${drawingColor}; border: 3px solid white; border-radius: 50%; box-shadow: 0 2px 8px rgba(0,0,0,0.3); animation: pulse 2s infinite;"></div>`,
-            iconSize: [22, 22],
-            iconAnchor: [11, 11],
-          }),
-          interactive: false,
-          zIndexOffset: 10000,
-        }).addTo(map)
-        break
-
-      case "marker":
-        map.dragging.enable()
-        drawingHintMarkerRef.current = L.marker([0, 0], {
-          icon: L.divIcon({
-            className: "drawing-hint-marker",
-            html: `<div style="width: 18px; height: 18px; background: ${drawingColor}; border: 3px solid white; border-radius: 50%; box-shadow: 0 2px 8px rgba(0,0,0,0.3); animation: bounce 1s infinite;"></div>`,
-            iconSize: [24, 24],
-            iconAnchor: [12, 12],
-          }),
-          interactive: false,
-          zIndexOffset: 10000,
-        }).addTo(map)
-        break
-
-      case "text":
-        map.dragging.enable()
-        drawingHintMarkerRef.current = L.marker([0, 0], {
-          icon: L.divIcon({
-            className: "drawing-hint-marker",
-            html: `<div style="width: 24px; height: 24px; background: white; border: 2px solid ${drawingColor}; border-radius: 4px; display: flex; align-items: center; justify-content: center; font-weight: bold; color: ${drawingColor}; box-shadow: 0 2px 8px rgba(0,0,0,0.3);">T</div>`,
-            iconSize: [24, 24],
-            iconAnchor: [12, 12],
-          }),
-          interactive: false,
-          zIndexOffset: 10000,
-        }).addTo(map)
-        break
-
-      default:
-        console.log(`Tool ${activeTool} not fully implemented yet`)
-        break
-    }
-  }, [activeTool, drawingColor, geomanLoaded, hasAccess, currentUser])
+  }, [geomanLoaded, drawingColor, onAddMapObject])
 
   useEffect(() => {
     const map = mapRef.current
@@ -914,7 +767,7 @@ export const MapComponent = forwardRef<MapComponentRef, MapComponentProps>(funct
               pointer-events: none;
               z-index: 1000;
             ">
-              ${user.name || "Anonim"}
+              ${user.email || user.name || "Anonim"}
             </div>
           </div>
         `,
@@ -1018,68 +871,85 @@ export const MapComponent = forwardRef<MapComponentRef, MapComponentProps>(funct
 
   useEffect(() => {
     const map = mapRef.current
-    if (!map || !hasAccess) return
+    if (!map || !objects.length) return
 
-    // Clear existing object layers
-    mapObjectsRef.current.forEach((obj) => {
-      if (obj.leafletLayer) {
-        map.removeLayer(obj.leafletLayer)
-      }
-      if (obj.triggerMarker) {
-        map.removeLayer(obj.triggerMarker)
+    // Clear existing objects
+    mapObjectsRef.current.forEach((leafletObj) => {
+      if (leafletObj.leafletLayer) {
+        mapRef.current?.removeLayer(leafletObj.leafletLayer)
       }
     })
     mapObjectsRef.current = []
 
-    // Render all objects from all users
     objects.forEach((obj) => {
-      const leafletObj: LeafletMapObject = { ...obj }
+      const userDisplayName = users.find((u) => u.uid === obj.user)?.email || obj.user
 
-      if (obj.type === "marker" && obj.lat && obj.lng) {
-        // Create marker icon based on m_type
-        let iconHtml = "📍"
-        if (obj.m_type === "text") iconHtml = "📝"
-        else if (obj.m_type === "brush") iconHtml = "🖌️"
-        else if (obj.m_type === "highlighter") iconHtml = "🖍️"
-        else if (obj.m_type === "ruler") iconHtml = "📏"
-        else if (obj.m_type === "compass") iconHtml = "🧭"
-        else if (obj.m_type === "crosshair") iconHtml = "🎯"
-        else if (obj.m_type === "arrow") iconHtml = "➡️"
-        else if (obj.m_type === "fill") iconHtml = "🎨"
+      const leafletObj: LeafletMapObject = {
+        id: obj.id,
+        leafletLayer: null,
+      }
+      mapObjectsRef.current.push(leafletObj)
+
+      if (obj.type === "marker") {
+        const isSelected = selectedObjectId === obj.id
+        const size = obj.size || 30
 
         const markerIcon = L.divIcon({
-          className: "custom-marker-icon",
           html: `
             <div style="
-              background: ${obj.color};
-              color: white;
-              border-radius: 50%;
-              width: 30px;
-              height: 30px;
+              background: ${obj.color}; 
+              width: ${size}px; 
+              height: ${size}px; 
+              border-radius: 50%; 
+              border: ${isSelected ? "3px solid #3b82f6" : "2px solid white"};
+              box-shadow: 0 2px 4px rgba(0,0,0,0.3);
               display: flex;
               align-items: center;
               justify-content: center;
-              font-size: 16px;
-              border: 2px solid white;
-              box-shadow: 0 2px 4px rgba(0,0,0,0.3);
+              font-size: ${size * 0.6}px;
+              color: white;
+              cursor: pointer;
+              position: relative;
             ">
-              ${iconHtml}
+              📍
+              ${
+                isSelected && editMode
+                  ? `
+                <div style="
+                  position: absolute;
+                  top: -5px;
+                  right: -5px;
+                  width: 10px;
+                  height: 10px;
+                  background: #3b82f6;
+                  border: 1px solid white;
+                  border-radius: 2px;
+                  cursor: nw-resize;
+                " class="resize-handle"></div>
+              `
+                  : ""
+              }
             </div>
           `,
-          iconSize: [30, 30],
-          iconAnchor: [15, 15],
+          iconSize: [size + 6, size + 6],
+          iconAnchor: [(size + 6) / 2, (size + 6) / 2],
         })
 
-        const marker = L.marker([obj.lat, obj.lng], { icon: markerIcon }).addTo(map)
+        const marker = L.marker([obj.lat, obj.lng], {
+          icon: markerIcon,
+          draggable: isSelected && editMode && obj.user === currentUser?.uid,
+        }).addTo(map)
 
-        // Add popup with object info
-        marker.bindPopup(`
-          <div style="min-width: 200px;">
-            <h4 style="margin: 0 0 8px 0; color: ${obj.color};">${obj.name || "Belgi"}</h4>
-            <p style="margin: 0 0 8px 0; font-size: 12px; color: #666;">Yaratuvchi: ${obj.user}</p>
-            ${obj.desc ? `<p style="margin: 0; font-size: 14px;">${obj.desc}</p>` : ""}
-          </div>
-        `)
+        marker.on("click", (e) => handleObjectClick(obj.id, e))
+
+        if (isSelected && editMode && obj.user === currentUser?.uid) {
+          marker.on("dragend", (e) => {
+            const newLatLng = e.target.getLatLng()
+            handleObjectDrag(obj.id, newLatLng.lat, newLatLng.lng)
+          })
+        }
+
+        marker.bindPopup(createPopupContent(leafletObj))
 
         leafletObj.leafletLayer = marker
       } else if (obj.type === "draw" && obj.coords) {
@@ -1098,13 +968,7 @@ export const MapComponent = forwardRef<MapComponentRef, MapComponentProps>(funct
             opacity: 0.8,
           }).addTo(map)
 
-          polyline.bindPopup(`
-            <div style="min-width: 200px;">
-              <h4 style="margin: 0 0 8px 0; color: ${obj.color};">${obj.name || "Chiziq"}</h4>
-              <p style="margin: 0 0 8px 0; font-size: 12px; color: #666;">Yaratuvchi: ${obj.user}</p>
-              ${obj.desc ? `<p style="margin: 0; font-size: 14px;">${obj.desc}</p>` : ""}
-            </div>
-          `)
+          polyline.bindPopup(createPopupContent(leafletObj))
 
           leafletObj.leafletLayer = polyline
         }
@@ -1116,40 +980,287 @@ export const MapComponent = forwardRef<MapComponentRef, MapComponentProps>(funct
           opacity: 0.8,
         }).addTo(map)
 
-        polyline.bindPopup(`
-          <div style="min-width: 200px;">
-            <h4 style="margin: 0 0 8px 0; color: ${obj.color};">${obj.name || "Chiziq"}</h4>
-            <p style="margin: 0 0 8px 0; font-size: 12px; color: #666;">Yaratuvchi: ${obj.user}</p>
-            ${obj.distance ? `<p style="margin: 0 0 8px 0; font-size: 12px;">Masofa: ${obj.distance.toFixed(2)} km</p>` : ""}
-            ${obj.desc ? `<p style="margin: 0; font-size: 14px;">${obj.desc}</p>` : ""}
-          </div>
-        `)
+        polyline.bindPopup(createPopupContent(leafletObj))
 
         leafletObj.leafletLayer = polyline
-      } else if (obj.type === "area" && obj.path) {
+      } else if (obj.type === "area" && obj.coordinates) {
         // Render area objects
-        const polygon = L.polygon(obj.path, {
+        const polygon = L.polygon(obj.coordinates, {
           color: obj.color,
           fillColor: obj.color,
           fillOpacity: 0.3,
           weight: 2,
         }).addTo(map)
 
-        polygon.bindPopup(`
-          <div style="min-width: 200px;">
-            <h4 style="margin: 0 0 8px 0; color: ${obj.color};">${obj.name || "Hudud"}</h4>
-            <p style="margin: 0 0 8px 0; font-size: 12px; color: #666;">Yaratuvchi: ${obj.user}</p>
-            ${obj.area ? `<p style="margin: 0 0 8px 0; font-size: 12px;">Maydon: ${obj.area.toFixed(2)} km²</p>` : ""}
-            ${obj.desc ? `<p style="margin: 0; font-size: 14px;">${obj.desc}</p>` : ""}
-          </div>
-        `)
+        polygon.bindPopup(createPopupContent(leafletObj))
 
         leafletObj.leafletLayer = polygon
-      }
+      } else if (obj.type === "circle") {
+        const radius = (obj.size || 50) / 2
+        const circle = L.circle([obj.lat, obj.lng], {
+          radius: radius,
+          color: obj.color || "#3b82f6",
+          fillColor: obj.color || "#3b82f6",
+          fillOpacity: 0.3,
+          weight: 3,
+        }).addTo(map)
 
-      mapObjectsRef.current.push(leafletObj)
+        // Add resize handles for circle
+        if (selectedObjectId === obj.id && editMode && obj.user === currentUser?.uid) {
+          const resizeIcon = L.divIcon({
+            html: `
+              <div style="
+                position: relative;
+                width: 10px;
+                height: 10px;
+                background: #3b82f6;
+                border: 2px solid white;
+                border-radius: 50%;
+                cursor: nw-resize;
+                box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+              " class="resize-handle" data-object-id="${obj.id}"></div>
+            `,
+            iconSize: [10, 10],
+            iconAnchor: [5, 5],
+          })
+
+          const resizeMarker = L.marker([obj.lat + radius / 111320, obj.lng], {
+            icon: resizeIcon,
+            draggable: false,
+          }).addTo(map)
+
+          mapObjectsRef.current.push(resizeMarker)
+        }
+
+        mapObjectsRef.current.push(circle)
+      } else if (obj.type === "triangle" || obj.type === "polygon" || obj.type === "star" || obj.type === "heart") {
+        const size = obj.size || 50
+        const points = getShapePoints(obj.type, obj.lat, obj.lng, size)
+
+        const polygon = L.polygon(points, {
+          color: obj.color || "#3b82f6",
+          fillColor: obj.color || "#3b82f6",
+          fillOpacity: 0.3,
+          weight: 3,
+        }).addTo(map)
+
+        // Add resize handles for polygons
+        if (selectedObjectId === obj.id && editMode && obj.user === currentUser?.uid) {
+          const resizeIcon = L.divIcon({
+            html: `
+              <div style="
+                position: relative;
+                width: 10px;
+                height: 10px;
+                background: #3b82f6;
+                border: 2px solid white;
+                border-radius: 2px;
+                cursor: nw-resize;
+                box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+              " class="resize-handle" data-object-id="${obj.id}"></div>
+            `,
+            iconSize: [10, 10],
+            iconAnchor: [5, 5],
+          })
+
+          const resizeMarker = L.marker([obj.lat + size / 222640, obj.lng + size / 222640], {
+            icon: resizeIcon,
+            draggable: false,
+          }).addTo(map)
+
+          mapObjectsRef.current.push(resizeMarker)
+        }
+
+        mapObjectsRef.current.push(polygon)
+      } else if (obj.type === "path" && obj.coordinates) {
+        const polyline = L.polyline(obj.coordinates, {
+          color: obj.color || "#3b82f6",
+          weight: obj.size || 3,
+        }).addTo(map)
+
+        mapObjectsRef.current.push(polyline)
+      }
     })
-  }, [objects, hasAccess])
+
+    const resizeHandles = document.querySelectorAll(".resize-handle")
+    resizeHandles.forEach((handle) => {
+      if (!handle) return
+
+      handle.addEventListener("mousedown", (e) => {
+        e.stopPropagation()
+        const objectId = (handle as HTMLElement).dataset.objectId || selectedObjectId
+        if (!objectId) return
+
+        const mouseEvent = e as MouseEvent
+        if (!mouseEvent.clientY) return
+
+        const startY = mouseEvent.clientY
+        const startX = mouseEvent.clientX
+        const obj = objects.find((o) => o.id === objectId)
+        const startSize = obj?.size || 30
+
+        const handleMouseMove = (moveEvent: MouseEvent) => {
+          if (!moveEvent.clientY || !moveEvent.clientX) return
+
+          // Calculate size change based on diagonal movement
+          const deltaY = startY - moveEvent.clientY
+          const deltaX = moveEvent.clientX - startX
+          const delta = Math.sqrt(deltaY * deltaY + deltaX * deltaX)
+          const direction = deltaY > 0 ? 1 : -1
+
+          const newSize = Math.max(10, Math.min(200, startSize + delta * direction * 0.5))
+          handleObjectResize(objectId, newSize)
+        }
+
+        const handleMouseUp = () => {
+          document.removeEventListener("mousemove", handleMouseMove)
+          document.removeEventListener("mouseup", handleMouseUp)
+        }
+
+        document.addEventListener("mousemove", handleMouseMove)
+        document.addEventListener("mouseup", handleMouseUp)
+      })
+
+      handle.addEventListener("dblclick", (e) => {
+        e.stopPropagation()
+        e.preventDefault()
+      })
+    })
+
+    return () => {
+      resizeHandles.forEach((handle) => {
+        handle.removeEventListener("mousedown", () => {})
+        handle.removeEventListener("dblclick", () => {})
+      })
+    }
+  }, [objects, selectedObjectId])
+
+  useEffect(() => {
+    const map = mapRef.current
+    if (!map) return
+
+    if (activeTool === "pen") {
+      // Disable map dragging when pen tool is selected
+      map.dragging.disable()
+      map.doubleClickZoom.disable()
+      map.scrollWheelZoom.disable()
+      map.boxZoom.disable()
+      map.keyboard.disable()
+    } else {
+      // Enable all interactions for cursor and other tools
+      map.dragging.enable()
+      map.doubleClickZoom.enable()
+      map.scrollWheelZoom.enable()
+      map.boxZoom.enable()
+      map.keyboard.enable()
+    }
+  }, [activeTool])
+
+  useEffect(() => {
+    const map = mapRef.current
+    if (!map) return
+
+    map.on("click", handleMapClick)
+    map.on("mousemove", handleMouseMove)
+    map.on("mousedown", handleMouseDown)
+    map.on("mouseup", handleMouseUp)
+
+    return () => {
+      map.off("click", handleMapClick)
+      map.off("mousemove", handleMouseMove)
+      map.off("mousedown", handleMouseDown)
+      map.off("mouseup", handleMouseUp)
+    }
+  }, [activeTool, drawingColor, hasAccess, currentUser])
+
+  const getUserDisplayName = (userId: string) => {
+    const user = users.find((u) => u.id === userId || u.uid === userId)
+    return user?.email || user?.name || "Anonim foydalanuvchi"
+  }
+
+  const createPopupContent = (obj: LeafletMapObject) => {
+    const isOwner = obj.user === currentUser?.uid
+    const userName = getUserDisplayName(obj.user)
+
+    const description = obj.desc || obj.description || ""
+    const displayName = obj.name || ""
+
+    return `
+      <div class="p-2">
+        <h3 class="font-bold text-lg mb-2">${displayName || "Belgi"}</h3>
+        <p class="text-sm text-gray-600 mb-2">${description || "Tavsif kiritilmagan"}</p>
+        <p class="text-xs text-gray-500 mb-3">Yaratuvchi: ${userName}</p>
+        ${
+          isOwner
+            ? `
+          <div class="flex gap-2">
+            <button 
+              onclick="handleEditObject('${obj.id}')" 
+              class="px-3 py-1 bg-blue-500 text-white rounded text-sm hover:bg-blue-600"
+            >
+              Tahrirlash
+            </button>
+            <button 
+              onclick="handleDeleteObject('${obj.id}')" 
+              class="px-3 py-1 bg-red-500 text-white rounded text-sm hover:bg-red-600"
+            >
+              O'chirish
+            </button>
+          </div>
+        `
+            : ""
+        }
+      </div>
+    `
+  }
+
+  useEffect(() => {
+    ;(window as any).handleEditObject = handleEditObject
+    ;(window as any).handleDeleteObject = handleDeleteObject
+
+    return () => {
+      delete (window as any).handleEditObject
+      delete (window as any).handleDeleteObject
+    }
+  }, [objects, currentUser])
+
+  const getShapePoints = (type: string, lat: number, lng: number, size: number): [number, number][] => {
+    const offset = size / 222640 // Convert pixels to lat/lng offset
+
+    switch (type) {
+      case "triangle":
+        return [
+          [lat + offset, lng],
+          [lat - offset, lng - offset],
+          [lat - offset, lng + offset],
+        ]
+      case "star":
+        const points: [number, number][] = []
+        for (let i = 0; i < 10; i++) {
+          const angle = (i * Math.PI) / 5
+          const radius = i % 2 === 0 ? offset : offset / 2
+          points.push([lat + radius * Math.cos(angle), lng + radius * Math.sin(angle)])
+        }
+        return points
+      case "heart":
+        const heartPoints: [number, number][] = []
+        for (let i = 0; i <= 100; i++) {
+          const t = (i / 100) * 2 * Math.PI
+          const x = 16 * Math.pow(Math.sin(t), 3)
+          const y = 13 * Math.cos(t) - 5 * Math.cos(2 * t) - 2 * Math.cos(3 * t) - Math.cos(4 * t)
+          heartPoints.push([lat + (y * offset) / 16, lng + (x * offset) / 16])
+        }
+        return heartPoints
+      case "polygon":
+      default:
+        return [
+          [lat + offset, lng + offset],
+          [lat + offset, lng - offset],
+          [lat - offset, lng - offset],
+          [lat - offset, lng + offset],
+        ]
+    }
+  }
 
   return <div id="mapDiv" ref={mapContainerRef} className="relative z-0" />
 })

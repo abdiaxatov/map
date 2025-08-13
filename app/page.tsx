@@ -295,6 +295,10 @@ export default function MapPage() {
     setActiveTool(tool)
   }
 
+  const handleToolComplete = () => {
+    setActiveTool("cursor")
+  }
+
   const handleColorChange = (color: string) => {
     setDrawingColor(color)
   }
@@ -459,6 +463,18 @@ export default function MapPage() {
     mapComponentRef.current?.locateUser()
   }
 
+  useEffect(() => {
+    const handleSwitchToCursor = () => {
+      setActiveTool("cursor")
+    }
+
+    window.addEventListener("switchToCursor", handleSwitchToCursor)
+
+    return () => {
+      window.removeEventListener("switchToCursor", handleSwitchToCursor)
+    }
+  }, [])
+
   if (authLoading || mapDataLoading) {
     return <div className="flex h-screen w-full items-center justify-center">Mapus yuklanmoqda...</div>
   }
@@ -595,6 +611,7 @@ export default function MapPage() {
             hasAccess={hasAccess}
             mapDetails={mapDetails}
             onObserveUser={handleObserveUser}
+            onToolComplete={handleToolComplete}
           />
           <SearchBox onSearchPanTo={handleSearchPanTo} />
 
